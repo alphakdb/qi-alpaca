@@ -1,11 +1,11 @@
-.qi.requireconfs`ALPACAKEY`ALPACASECRET
-
 if[first not enlist(.qi.tostr .qi.getconf[`ENDPOINT;"/v1beta3/crypto/us"])in enlist each("/v2/iex";"/v2/test";"/v1beta3/crypto/us";"/v1beta1/news";"/v1beta1/indicative");
     .qi.fatal"Make Sure Your ENDPOINT Is Entered Correctly! Check The Spelling"]
 
 .qi.import`ipc;
 .qi.frompkg[`alpaca;`norm]
 .qi.frompkg[`proc;`feed]
+
+.feed.requirekey @/:`ALPACAKEY`ALPACASECRET
 
 \d .alpaca
 if[not .qi.isproc;.qi.loadschemas`alpaca]
