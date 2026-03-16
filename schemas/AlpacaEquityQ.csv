@@ -1,0 +1,10 @@
+time,p
+sym,s
+bidex,s
+bidPrice,f
+bidSize,j
+askEx,s
+askPrice,f
+askSize,j
+feedtime,p
+tptime,p

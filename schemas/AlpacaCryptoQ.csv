@@ -1,0 +1,8 @@
+time,p
+sym,s
+bidPrice,f
+bidSpread,f
+askPrice,f
+askSpread,f
+feedtime,p
+tptime,p

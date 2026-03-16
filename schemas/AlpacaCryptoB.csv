@@ -1,0 +1,11 @@
+time,p
+sym,s
+open,f
+high,f
+low,f
+close,f
+volume,f
+vwap,f
+count,j
+feedtime,p
+tptime,p
