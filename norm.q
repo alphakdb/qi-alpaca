@@ -1,4 +1,3 @@
-\d .alpaca
 norm.Etrades:{
   ("P"$-1_x`t; / time stamp 
    `$x`S; / Sym

@@ -7,10 +7,6 @@ if[first not enlist(.qi.tostr .qi.getconf[`ENDPOINT;"/v1beta3/crypto/us"])in enl
 
 .feed.requirekey @/:`ALPACAKEY`ALPACASECRET
 
-\d .alpaca
-if[not .qi.isproc;.qi.loadschemas`alpaca]
-.qi.loadschemas`alpaca
-
 url:.qi.tosym .qi.getconf[`url;`:wss://stream.data.alpaca.markets:443]
 header:"GET ",(feed:.qi.tostr .qi.getconf[`ENDPOINT;"/v1beta3/crypto/us"])," HTTP/1.1\r\n","Host: stream.data.alpaca.markets\r\n","\r\n";
 tickers:`$$[sum","=(t:.qi.tostr .qi.getconf[`TICKERS;"ETH/USD"]);","vs t;enlist t]
@@ -35,6 +31,4 @@ msg.status:{[x]
 
 .z.ws:{{$[(first x`T)in"tqb";msg.data x;msg.status x]}each .j.k x}
 
-start::{.feed.start[header;url]}
-
-\d .
+start:{.feed.start[header;url]}
