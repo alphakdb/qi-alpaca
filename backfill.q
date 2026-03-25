@@ -1,4 +1,4 @@
-.qi.loadconf(.qi.qihome`alpaca;`defaults)
+
 .alpaca.BASEURL:"https://data.alpaca.markets/v2/stocks/bars"
 .conf.ALPACA_KEY:"PKPHWIVR6N4YU2ON2D5TJDYWB6"
 .conf.ALPACA_SECRET:"5HMBNJhRruFq7gBMLrDQuQ3k8xtVbwnxYk44BUBAiMTD"
@@ -8,10 +8,7 @@
   n:count bars;
   b:flip bars;
   times:"P"$-1_'b`t;
-  flip`time`sym`high`low`open`close`volume`vwap`feedtime`tptime!(
-    times;n#sym;
-    9h$b`h;9h$b`l;9h$b`o;9h$b`c;
-    7h$b`v;9h$b`vw;n#.z.p;n#0Np)
+  flip`time`sym`high`low`open`close`volume`vwap`feedtime`tptime!(times;n#sym;9h$b`h;9h$b`l;9h$b`o;9h$b`c;7h$b`v;9h$b`vw;n#.z.p;n#0Np)
   }
 
 / Download and parse one month for one symbol, handles pagination
@@ -57,6 +54,6 @@
 .alpaca.backfill:{[syms;start;end;interval;hdbpath]
   p:.qi.path hdbpath;
   .alpaca.backfillsym[;start;end;interval;p] each syms;
-  {t:.qi.path(x;y;`AlpacaEquityB);`sym xasc hsym t;@[t;`sym;`p#]}[p;]each key[p] where key[p] like"[0-9]*";
+  {t:.qi.path(x;y;`AlpacaEquityB);`sym xasc t;@[t;`sym;`p#]}[p;]each key[p] where key[p] like"[0-9]*";
   .qi.info"Backfill complete";
   }
