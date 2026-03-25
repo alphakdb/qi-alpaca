@@ -1,7 +1,4 @@
-
 .alpaca.BASEURL:"https://data.alpaca.markets/v2/stocks/bars"
-.conf.ALPACA_KEY:"PKPHWIVR6N4YU2ON2D5TJDYWB6"
-.conf.ALPACA_SECRET:"5HMBNJhRruFq7gBMLrDQuQ3k8xtVbwnxYk44BUBAiMTD"
 
 / Parse list of bar dicts from REST response into typed table for one symbol
 .alpaca.parse:{[sym;bars]
@@ -54,6 +51,6 @@
 .alpaca.backfill:{[syms;start;end;interval;hdbpath]
   p:.qi.path hdbpath;
   .alpaca.backfillsym[;start;end;interval;p] each syms;
-  {t:.qi.path(x;y;`AlpacaEquityB);`sym xasc t;@[t;`sym;`p#]}[p;]each key[p] where key[p] like"[0-9]*";
+  {[p;d]t:.qi.path(p;d;`AlpacaEquityB);if[.qi.exists t;`sym xasc t;@[t;`sym;`p#]]}[p;]each key[p] where key[p] like"[0-9]*";
   .qi.info"Backfill complete";
   }

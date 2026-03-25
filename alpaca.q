@@ -4,6 +4,7 @@ if[first not enlist(.qi.tostr .qi.getconf[`ENDPOINT;"/v1beta3/crypto/us"])in enl
 .qi.import`ipc;
 .qi.frompkg[`alpaca;`norm]
 .qi.frompkg[`proc;`feed]
+.qi.frompkg[`alpaca;`backfill]
 
 .feed.requirekey @/:`ALPACA_KEY`ALPACA_SECRET
 
