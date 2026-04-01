@@ -1,18 +1,24 @@
 .alpaca.BASEURL:"https://data.alpaca.markets/v2/stocks/bars"
 
+.alpaca.hdb_dir:{
+  $[.qi.isproc;
+    .qi.path(.conf.DATA;.proc.self.stackname;`hdb;.proc.self.options`hdb);
+    .qi.path .conf.ALPACA_HDB] /TODO
+  }
+
 / Parse list of bar dicts from REST response into typed table for one symbol
 .alpaca.parse:{[sym;bars]
   n:count bars;
   b:flip bars;
   times:"P"$-1_'b`t;
-  flip`time`sym`high`low`open`close`volume`vwap`feedtime`tptime!(times;n#sym;9h$b`h;9h$b`l;9h$b`o;9h$b`c;7h$b`v;9h$b`vw;n#.z.p;n#0Np)
+  flip`time`sym`open`high`low`close`vwap`volume`feedtime`tptime!(times;n#sym;9h$b`o;9h$b`h;9h$b`l;9h$b`c;9h$b`vw;7h$b`v;n#.z.p;n#0Np)
   }
 
 / Download and parse one month for one symbol, handles pagination
 .alpaca.fetchmonth:{[sym;interval;ym]
   start:ssr[string`date$ym;".";"-"],"T00:00:00Z";
   end:ssr[string`date$ym+1;".";"-"],"T00:00:00Z";
-  url:.alpaca.BASEURL,"?symbols=",string[sym],"&timeframe=",interval,"&start=",start,"&end=",end,"&limit=10000";
+  url:.alpaca.BASEURL,"?symbols=",string[sym],"&timeframe=",string[interval],"&start=",start,"&end=",end,"&limit=10000";
   hdrs:"-H \"APCA-API-KEY-ID: ",.conf.ALPACA_KEY,"\" -H \"APCA-API-SECRET-KEY: ",.conf.ALPACA_SECRET,"\"";
   .qi.info"Fetching ",string[sym]," ",string ym;
   acc:first{not ""~x 1}
@@ -48,9 +54,14 @@
   }
 
 / Backfill all symbols, apply sort and p# at end
-.alpaca.backfill:{[syms;start;end;interval;hdbpath]
-  p:.qi.path hdbpath;
-  .alpaca.backfillsym[;start;end;interval;p] each syms;
+.alpaca.backfill:{[syms;start;end;interval]
+  p:.alpaca.hdb_dir[];
+  .alpaca.backfillsym[;start;end;interval;p]each syms;
   {[p;d]t:.qi.path(p;d;`AlpacaEquityB);if[.qi.exists t;`sym xasc t;@[t;`sym;`p#]]}[p;]each key[p] where key[p] like"[0-9]*";
+  .Q.chk p;
+  if[.qi.isproc;
+    $[null h:.ipc.conn hdb:.qi.tosym .proc.self.options`hdb;
+      .qi.info"Could not connect to ",string[hdb]," to initiate reload";
+      [.qi.info"Initiating reload on ",string hdb;h"reload[]"]]];
   .qi.info"Backfill complete";
   }
