@@ -29,9 +29,19 @@
       bars:$[sym in key r`bars;r[`bars;sym];()];
       newacc:$[0<count bars;(s 0),enlist .alpaca.parse[sym;bars];s 0];
       t:$[`next_page_token in key r;r`next_page_token;::];
-      (newacc;$[t~(::);"";baseurl,"&page_token=",t])
+      nxt:"";
+      if[not(t~(::))|(t~"");nxt:baseurl,"&page_token=",raze{$[x="+";"%2B";x="/";"%2F";enlist x]}each t];
+      (newacc;nxt)
       }[;hdrs;sym;url]/(();url);
   $[0=count acc;();raze acc]
+  }
+
+/ Check if sym already exists in a partition date
+.alpaca.symexists:{[hdbpath;date;sym]
+  p:.qi.path(hdbpath;`$string date;`AlpacaEquityB;`sym);
+  s:.qi.path(hdbpath;`sym);
+  if[not .qi.exists p;:0b];
+  sym in distinct get[s]get p
   }
 
 / Write one day's rows to HDB partition
@@ -45,17 +55,30 @@
 / Backfill month by month for one symbol
 .alpaca.backfillsym:{[sym;start;end;interval;hdbpath]
   .qi.info"Backfilling ",string[sym]," interval ",string[start]," to ",string end;
-  {[sym;interval;hdbpath;ym]
+  {[sym;interval;hdbpath;start;end;ym]
+    alldts:("d"$ym)+til("d"$ym+1)-"d"$ym;
+    / dates with real data (time col exists, not just .Q.chk empty dirs) vs dates where this sym exists
+    hasdata:alldts where{.qi.exists .qi.path(x;`$string y;`AlpacaEquityB;`time)}[hdbpath;]each alldts;
+    withsym:alldts where .alpaca.symexists[hdbpath;;sym] each alldts;
+    / skip fetch if all real-data dates already have this sym
+    if[(count withsym)&withsym~hasdata;
+      .qi.info"Skipping ",(string sym)," ",(string ym),": already backfilled";
+      :withsym where withsym within(start;end)];
     tbl:.alpaca.fetchmonth[sym;interval;ym];
-    if[not count tbl;:()];
+    if[not count tbl;:`date$()];
+    dts:distinct`date$tbl`time;
+    / write all dates from response where sym is missing (not just [start,end])
+    dts:dts except dts where .alpaca.symexists[hdbpath;;sym] each dts;
     {[hdbpath;tbl;dt].alpaca.writepart[hdbpath;dt;select from tbl where(`date$time)=dt]
-      }[hdbpath;tbl;] each distinct`date$tbl`time
-    }[sym;interval;hdbpath;] each distinct`month$start+til 1+end-start;
+      }[hdbpath;tbl;] each dts;
+    / return only dates within requested range
+    dts where dts within(start;end)
+    }[sym;interval;hdbpath;start;end;] each distinct`month$start+til 1+end-start;
   }
 
 / Backfill all symbols, apply sort and p# at end
-.alpaca.backfill:{[syms;start;end;interval]
-  p:.alpaca.hdb_dir[];
+.alpaca.backfill:{[syms;start;end;interval;hdbpath]
+  p:.qi.path hdbpath;
   .alpaca.backfillsym[;start;end;interval;p]each syms;
   {[p;d]t:.qi.path(p;d;`AlpacaEquityB);if[.qi.exists t;`sym xasc t;@[t;`sym;`p#]]}[p;]each key[p] where key[p] like"[0-9]*";
   .Q.chk p;
