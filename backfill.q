@@ -36,12 +36,32 @@
   $[0=count acc;();raze acc]
   }
 
-/ Check if sym already exists in a partition date
-.alpaca.symexists:{[hdbpath;date;sym]
-  p:.qi.path(hdbpath;`$string date;`AlpacaEquityB;`sym);
+/ Persistent index of completed (sym;date) — O(1) skip check
+.alpaca.IDXFILE:`alpaca_backfilled;
+
+.alpaca.rebuildidx:{[hdbpath]
+  .qi.info"Building alpaca backfill index from HDB (one-time)...";
+  empty:([]sym:`$();date:`date$());
   s:.qi.path(hdbpath;`sym);
-  if[not .qi.exists p;:0b];
-  sym in distinct get[s]get p
+  if[not .qi.exists s;.qi.path(hdbpath;.alpaca.IDXFILE)set empty;:empty];
+  symenum:get s;
+  dparts:`date$string each k where(k:key hdbpath)like"[0-9]*";
+  rows:raze{[hdbpath;symenum;dt]
+    p:.qi.path(hdbpath;dt;`AlpacaEquityB;`sym);
+    if[not .qi.exists p;:()];
+    syms:distinct symenum get p;
+    if[not count syms;:()];
+    ([]sym:syms;date:count[syms]#dt)
+    }[hdbpath;symenum;]each dparts;
+  idx:$[count rows;rows;empty];
+  .qi.path(hdbpath;.alpaca.IDXFILE)set idx;
+  .qi.info"Index built: ",string[count idx]," entries";
+  idx
+  }
+
+.alpaca.loadidx:{[hdbpath]
+  p:.qi.path(hdbpath;.alpaca.IDXFILE);
+  $[.qi.exists p;get p;.alpaca.rebuildidx hdbpath]
   }
 
 / Write one day's rows to HDB partition
@@ -55,23 +75,24 @@
 / Backfill month by month for one symbol
 .alpaca.backfillsym:{[sym;start;end;interval;hdbpath]
   .qi.info"Backfilling ",string[sym]," interval ",string[start]," to ",string end;
+  .alpaca.IDX:.alpaca.loadidx hdbpath;
   {[sym;interval;hdbpath;start;end;ym]
-    alldts:("d"$ym)+til("d"$ym+1)-"d"$ym;
-    / dates with real data (time col exists, not just .Q.chk empty dirs) vs dates where this sym exists
-    hasdata:alldts where{.qi.exists .qi.path(x;`$string y;`AlpacaEquityB;`time)}[hdbpath;]each alldts;
-    withsym:alldts where .alpaca.symexists[hdbpath;;sym] each alldts;
-    / skip fetch if all real-data dates already have this sym
-    if[(count withsym)&withsym~hasdata;
-      .qi.info"Skipping ",(string sym)," ",(string ym),": already backfilled";
-      :withsym where withsym within(start;end)];
+    alldts:til[("d"$ym+1)-"d"$ym]+"d"$ym;
+    donedts:exec date from .alpaca.IDX where sym=sym;
+    / trading days in this month = dates any sym has been written for
+    tradingdts:exec distinct date from .alpaca.IDX where date in alldts;
+    if[count[tradingdts]&all tradingdts in donedts;
+      .qi.info"Skipping ",string[sym]," ",string[ym],": already backfilled";
+      :tradingdts where tradingdts within(start;end)];
     tbl:.alpaca.fetchmonth[sym;interval;ym];
     if[not count tbl;:`date$()];
     dts:distinct`date$tbl`time;
-    / write all dates from response where sym is missing (not just [start,end])
-    dts:dts except dts where .alpaca.symexists[hdbpath;;sym] each dts;
+    dts:dts where not dts in donedts;
     {[hdbpath;tbl;dt].alpaca.writepart[hdbpath;dt;select from tbl where(`date$time)=dt]
       }[hdbpath;tbl;] each dts;
-    / return only dates within requested range
+    if[count dts;
+      .alpaca.IDX,::(([]sym:count[dts]#sym;date:dts));
+      .qi.path(hdbpath;.alpaca.IDXFILE)set .alpaca.IDX];
     dts where dts within(start;end)
     }[sym;interval;hdbpath;start;end;] each distinct`month$start+til 1+end-start;
   }
@@ -81,10 +102,11 @@
   p:.qi.path hdbpath;
   .alpaca.backfillsym[;start;end;interval;p]each syms;
   {[p;d]t:.qi.path(p;d;`AlpacaEquityB);if[.qi.exists t;`sym xasc t;@[t;`sym;`p#]]}[p;]each key[p] where key[p] like"[0-9]*";
-  .Q.chk p;
   if[.qi.isproc;
     $[null h:.ipc.conn hdb:.qi.tosym .proc.self.options`hdb;
       .qi.info"Could not connect to ",string[hdb]," to initiate reload";
       [.qi.info"Initiating reload on ",string hdb;h"reload[]"]]];
   .qi.info"Backfill complete";
+  .Q.chk p;
+  `AlpacaEquityB
   }
