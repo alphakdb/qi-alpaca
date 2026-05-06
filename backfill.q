@@ -40,34 +40,36 @@
 .alpaca.IDXFILE:`alpaca_backfilled;
 
 .alpaca.rebuildidx:{[hdbpath]
-  hdbpath:hsym .qi.tosym hdbpath; / FIX: Atomize path
-  .qi.info"Building alpaca backfill index from HDB (one-time)...";
-  empty:([]sym:`$();date:`date$());
-  
-  / FIX: Resolve index path safely
+  hdbpath:hsym .qi.tosym hdbpath;
+  .qi.info"Building alpaca backfill index from HDB...";
+  empty:([]sym:`$();interval:`$();date:`date$());
   idxFile:.qi.path(hdbpath;.alpaca.IDXFILE);
   
   s:.qi.path(hdbpath;`sym);
   if[not .qi.exists s;idxFile set empty;:empty];
   
   symenum:get s;
-  k:key hdbpath;
-  dparts:k where k like "[0-9]*";
-  
-  / FIX: Handle fresh HDB with no partitions
+  dparts:key[hdbpath] where (key hdbpath) like "[0-9]*";
   if[not count dparts;idxFile set empty;:empty];
 
   rows:raze{[hdbpath;symenum;dt]
-    p:.qi.path(hdbpath;dt;`AlpacaEquityB;`sym);
-    if[not .qi.exists p;:()];
-    syms:distinct symenum get p;
-    if[not count syms;:()];
-    ([]sym:syms;date:count[syms]#`date$string dt) / Ensure dt is cast correctly
-    }[hdbpath;symenum;]each dparts;
+    targetDir:.qi.path(hdbpath;dt);
+    / Fixed k1 assignment order
+    k1:key targetDir;
+    tnames:k1 where k1 like "AlpacaEquityB*";
+    
+    raze{[hdbpath;symenum;dt;tname]
+      p:.qi.path(hdbpath;dt;tname;`sym);
+      if[not .qi.exists p;:()];
+      syms:distinct symenum get p;
+      / Extract interval (13 chars in AlpacaEquityB)
+      intv:`$13_string tname; 
+      ([]sym:syms;interval:count[syms]#intv;date:count[syms]#`date$string dt)
+    }[hdbpath;symenum;dt;] each tnames
+  }[hdbpath;symenum;] each dparts;
   
   idx:$[count rows;rows;empty];
   idxFile set idx;
-  .qi.info"Index built: ",string[count idx]," entries";
   idx
  }
 
@@ -77,48 +79,67 @@
   }
 
 / Write one day's rows to HDB partition
-.alpaca.writepart:{[hdbpath;date;tbl]
+.alpaca.writepart:{[hdbpath;interval;date;tbl]
+  tname:`$ "AlpacaEquityB", string interval;
   .qi.os.ensuredir .qi.path(hdbpath;`$string date);
-  partpath:.qi.path(hdbpath;`$string date;`AlpacaEquityB);
+  partpath:.qi.path(hdbpath;`$string date;tname);
   .[.qi.path(partpath;`);();,;.Q.en[hdbpath;tbl]];
-  .qi.info string[date]," ",string[count tbl]," rows";
-  }
+  .qi.info string[date]," ",string[count tbl]," rows written to ",string tname;
+ }
 
 / Backfill month by month for one symbol
-.alpaca.backfillsym:{[sym;start;end;interval;hdbpath]
-  .qi.info"Backfilling ",string[sym]," interval ",string[start]," to ",string end;
+.alpaca.backfillsym:{[s;start;end;int;hdbpath]
+  s:`$string s; int:`$string int;
+  .qi.info"Backfilling ",string[s]," ",string[int]," ",string[start]," to ",string end;
+  
   .alpaca.IDX:.alpaca.loadidx hdbpath;
-  {[sym;interval;hdbpath;start;end;ym]
-    alldts:til[("d"$ym+1)-"d"$ym]+"d"$ym;
-    donedts:exec date from .alpaca.IDX where sym=sym;
-    / trading days in this month = dates any sym has been written for
-    tradingdts:exec distinct date from .alpaca.IDX where date in alldts;
-    if[count[tradingdts]&all tradingdts in donedts;
-      .qi.info"Skipping ",string[sym]," ",string[ym],": already backfilled";
-      :tradingdts where tradingdts within(start;end)];
-    tbl:.alpaca.fetchmonth[sym;interval;ym];
-    if[not count tbl;:`date$()];
+  donedts:exec date from .alpaca.IDX where sym=s, interval=int;
+
+  allmos:distinct `month$start+til 1+"i"$end-start;
+  missing_mos:allmos except distinct `month$donedts;
+  if[not count missing_mos;
+    .qi.info"Already fully backfilled ",string[s]," ",string[int];
+    :donedts where donedts within(start;end)
+  ];
+  .qi.info"Missing data found. Fetching ",string[count missing_mos]," months...";
+
+  raze {[s;int;hdbpath;start;end;donedts;ym]
+    tbl:.alpaca.fetchmonth[s;int;ym];
+    if[not count tbl; :`date$()];
+    
     dts:distinct`date$tbl`time;
     dts:dts where not dts in donedts;
-    {[hdbpath;tbl;dt].alpaca.writepart[hdbpath;dt;select from tbl where(`date$time)=dt]
-      }[hdbpath;tbl;] each dts;
+    
     if[count dts;
-      .alpaca.IDX,::(([]sym:count[dts]#sym;date:dts));
-      (.qi.path(hdbpath;.alpaca.IDXFILE))set .alpaca.IDX];
+      {[hdbpath;int;tbl;dt]
+        .alpaca.writepart[hdbpath;int;dt;select from tbl where(`date$time)=dt]
+      }[hdbpath;int;tbl;] each dts;
+      
+      .alpaca.IDX,:([]sym:count[dts]#s;interval:count[dts]#int;date:dts);
+      (.qi.path(hdbpath;.alpaca.IDXFILE)) set .alpaca.IDX
+    ];
+    
     dts where dts within(start;end)
-    }[sym;interval;hdbpath;start;end;] each distinct`month$start+til 1+end-start;
-  }
+  }[s;int;hdbpath;start;end;donedts;] each missing_mos
+ }
 
 / Backfill all symbols, apply sort and p# at end
 .alpaca.backfill:{[syms;start;end;interval;hdbpath]
   p:.qi.path hdbpath;
-  .alpaca.backfillsym[;start;end;interval;p]each syms;
-  {[p;d]t:.qi.path(p;d;`AlpacaEquityB);if[.qi.exists t;`sym xasc t;@[t;`sym;`p#]]}[p;]each key[p] where key[p] like"[0-9]*";
+  tname:`$ "AlpacaEquityB", string interval;
+  / Run backfill for each symbol
+  .alpaca.backfillsym[;start;end;interval;p] each syms;
+  / Corrected sort/attr logic using specific tname
+  dparts:key[p] where (key p) like "[0-9]*";
+  {[p;tname;d]
+    t:.qi.path(p;d;tname);
+    if[.qi.exists t; `sym xasc t; @[t;`sym;`p#]];
+  }[p;tname;] each dparts;
   if[.qi.isproc;
     $[null h:.ipc.conn hdb:.qi.tosym .proc.self.options`hdb;
-      .qi.info"Could not connect to ",string[hdb]," to initiate reload";
-      [.qi.info"Initiating reload on ",string hdb;h"reload[]"]]];
-  .qi.info"Backfill complete";
+      .qi.info"Could not connect to ",string[hdb];
+      [.qi.info"Reloading ",string hdb; h"reload[]"]]];
+  .qi.info"Backfill complete for ",string tname;
   .Q.chk p;
-  `AlpacaEquityB
-  }
+  tname
+ }
