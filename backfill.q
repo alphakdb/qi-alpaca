@@ -40,24 +40,36 @@
 .alpaca.IDXFILE:`alpaca_backfilled;
 
 .alpaca.rebuildidx:{[hdbpath]
+  hdbpath:hsym .qi.tosym hdbpath; / FIX: Atomize path
   .qi.info"Building alpaca backfill index from HDB (one-time)...";
   empty:([]sym:`$();date:`date$());
+  
+  / FIX: Resolve index path safely
+  idxFile:.qi.path(hdbpath;.alpaca.IDXFILE);
+  
   s:.qi.path(hdbpath;`sym);
-  if[not .qi.exists s;.qi.path(hdbpath;.alpaca.IDXFILE)set empty;:empty];
+  if[not .qi.exists s;idxFile set empty;:empty];
+  
   symenum:get s;
-  dparts:`date$string each k where(k:key hdbpath)like"[0-9]*";
+  k:key hdbpath;
+  dparts:k where k like "[0-9]*";
+  
+  / FIX: Handle fresh HDB with no partitions
+  if[not count dparts;idxFile set empty;:empty];
+
   rows:raze{[hdbpath;symenum;dt]
     p:.qi.path(hdbpath;dt;`AlpacaEquityB;`sym);
     if[not .qi.exists p;:()];
     syms:distinct symenum get p;
     if[not count syms;:()];
-    ([]sym:syms;date:count[syms]#dt)
+    ([]sym:syms;date:count[syms]#`date$string dt) / Ensure dt is cast correctly
     }[hdbpath;symenum;]each dparts;
+  
   idx:$[count rows;rows;empty];
-  .qi.path(hdbpath;.alpaca.IDXFILE)set idx;
+  idxFile set idx;
   .qi.info"Index built: ",string[count idx]," entries";
   idx
-  }
+ }
 
 .alpaca.loadidx:{[hdbpath]
   p:.qi.path(hdbpath;.alpaca.IDXFILE);
@@ -92,7 +104,7 @@
       }[hdbpath;tbl;] each dts;
     if[count dts;
       .alpaca.IDX,::(([]sym:count[dts]#sym;date:dts));
-      .qi.path(hdbpath;.alpaca.IDXFILE)set .alpaca.IDX];
+      (.qi.path(hdbpath;.alpaca.IDXFILE))set .alpaca.IDX];
     dts where dts within(start;end)
     }[sym;interval;hdbpath;start;end;] each distinct`month$start+til 1+end-start;
   }
