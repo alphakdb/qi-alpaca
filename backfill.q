@@ -89,11 +89,10 @@
 
 / Backfill month by month for one symbol
 .alpaca.backfillsym:{[s;start;end;int;hdbpath]
-  s:`$string s; int:`$string int;
   .qi.info"Backfilling ",string[s]," ",string[int]," ",string[start]," to ",string end;
   
   .alpaca.IDX:.alpaca.loadidx hdbpath;
-  donedts:exec date from .alpaca.IDX where sym=s, interval=int;
+  donedts:exec date from .alpaca.IDX where sym=s,interval=int;
 
   allmos:distinct `month$start+til 1+"i"$end-start;
   missing_mos:allmos except distinct `month$donedts;
