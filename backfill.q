@@ -1,5 +1,9 @@
 .alpaca.BASEURL:"https://data.alpaca.markets/v2/stocks/bars"
 
+{missing:`ALPACA_KEY`ALPACA_SECRET except key .conf;
+ if[count missing;.qi.fatal"Missing Alpaca credentials: ",(", "sv string missing)," -- run: qbt auth set alpaca --key YOUR_API_KEY --secret YOUR_SECRET"]}`
+
+
 .alpaca.hdb_dir:{
   $[.qi.isproc;
     .qi.path(.conf.DATA;.proc.self.stackname;`hdb;.proc.self.options`hdb);
@@ -107,6 +111,7 @@
     if[not count tbl; :`date$()];
     
     dts:distinct`date$tbl`time;
+    dts:dts where not (dts mod 7) in 0 1;  / drop weekends (0=Sat,1=Sun)
     dts:dts where not dts in donedts;
     
     if[count dts;
