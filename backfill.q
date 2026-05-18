@@ -1,5 +1,7 @@
 .alpaca.BASEURL:"https://data.alpaca.markets/v2/stocks/bars"
 
+.alpaca.normiv:{x^(`1m`5m`15m`30m`1h`2h`4h`6h`12h`1d`1w`1mo!`1Min`5Min`15Min`30Min`1Hour`2Hour`4Hour`6Hour`12Hour`1Day`1Week`1Month)x}
+
 {missing:`ALPACA_KEY`ALPACA_SECRET except key .conf;
  if[count missing;.qi.fatal"Missing Alpaca credentials: ",(", "sv string missing)," -- run: qbt auth set alpaca --key YOUR_API_KEY --secret YOUR_SECRET"]}`
 
@@ -22,7 +24,7 @@
 .alpaca.fetchmonth:{[sym;interval;ym]
   start:ssr[string`date$ym;".";"-"],"T00:00:00Z";
   end:ssr[string`date$ym+1;".";"-"],"T00:00:00Z";
-  url:.alpaca.BASEURL,"?symbols=",string[sym],"&timeframe=",string[interval],"&start=",start,"&end=",end,"&limit=10000";
+  url:.alpaca.BASEURL,"?symbols=",string[sym],"&timeframe=",string[.alpaca.normiv interval],"&start=",start,"&end=",end,"&limit=10000";
   hdrs:"-H \"APCA-API-KEY-ID: ",.conf.ALPACA_KEY,"\" -H \"APCA-API-SECRET-KEY: ",.conf.ALPACA_SECRET,"\"";
   .qi.info"Fetching ",string[sym]," ",string ym;
   acc:first{not ""~x 1}
@@ -129,6 +131,7 @@
 
 / Backfill all symbols, apply sort and p# at end
 .alpaca.backfill:{[syms;start;end;interval;hdbpath]
+  interval:.alpaca.normiv interval;
   p:.qi.path hdbpath;
   tname:`$ "AlpacaEquityB", string interval;
   / Run backfill for each symbol
